@@ -1,0 +1,6 @@
+name = "resistor-color-bar-extractor"
+main = "src/index.js"
+compatibility_date = "2023-10-25"
+
+# Serve static assets from the public directory
+assets = { directory = "./public", binding = "ASSETS" }
