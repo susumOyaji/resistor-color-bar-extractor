@@ -349,6 +349,8 @@ document.addEventListener('DOMContentLoaded', () => {
         scanChartContainer.style.flexDirection = 'column'; // Stack slices vertically
         scanChartContainer.style.gap = '0.5rem';
         scanChartContainer.style.marginBottom = '2rem';
+        scanChartContainer.style.overflowX = 'auto'; // Enable horizontal scrolling
+        scanChartContainer.style.paddingBottom = '0.5rem'; // Space for scrollbar
 
         slices.forEach((slice, index) => {
             const row = document.createElement('div');
@@ -379,6 +381,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 colorBlock.style.textAlign = 'center';
                 colorBlock.style.whiteSpace = 'nowrap'; // Prevent text wrapping
                 colorBlock.style.padding = '0 4px';
+                colorBlock.style.minWidth = '0'; // Allow to shrink properly
+                colorBlock.style.textOverflow = 'ellipsis'; // Show dots if too small
 
                 // Determine text color based on brightness
                 const brightness = (color.r * 299 + color.g * 587 + color.b * 114) / 1000;

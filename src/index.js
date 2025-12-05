@@ -62,9 +62,20 @@ async function handleScan(request) {
                 count: b.width // Use width as count
             }));
 
+            // Identify the dominant color (likely body color) by width
+            let dominantBand = null;
+            if (bands.length > 0) {
+                dominantBand = bands.reduce((prev, current) => (prev.width > current.width) ? prev : current);
+            }
+
             // Extract just the valid resistor band names for logic
             const validBands = bands
-                .filter(b => b.colorName !== 'Beige (Body)')
+                .filter(b => {
+                    // Exclude the dominant color (most pixels) as it is likely the resistor body
+                    // Ensure we don't remove everything if only 1 band is found
+                    if (bands.length > 1 && b === dominantBand) return false;
+                    return b.colorName !== 'Beige (Body)';
+                })
                 .map(b => b.colorName);
 
             return {
