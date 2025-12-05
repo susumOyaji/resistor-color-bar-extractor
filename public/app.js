@@ -346,28 +346,51 @@ document.addEventListener('DOMContentLoaded', () => {
 
         scanChartContainer.innerHTML = '';
         scanChartContainer.style.display = 'flex';
+        scanChartContainer.style.flexDirection = 'column'; // Stack slices vertically
         scanChartContainer.style.gap = '0.5rem';
         scanChartContainer.style.marginBottom = '2rem';
 
         slices.forEach((slice, index) => {
-            const column = document.createElement('div');
-            column.style.flex = '1';
-            column.style.display = 'flex';
-            column.style.flexDirection = 'column';
-            column.style.gap = '0.25rem';
+            const row = document.createElement('div');
+            row.style.display = 'flex';
+            row.style.flexDirection = 'row'; // Arrange colors horizontally
+            row.style.height = '50px'; // Fixed height for each slice
+            row.style.width = '100%';
+            row.style.borderRadius = '4px';
+            row.style.overflow = 'hidden'; // Ensure rounded corners work
 
             slice.colors.forEach(color => {
                 const colorBlock = document.createElement('div');
                 colorBlock.style.backgroundColor = `rgb(${color.r}, ${color.g}, ${color.b})`;
-                colorBlock.style.height = '60px';
-                colorBlock.style.borderRadius = '4px';
+
+                // Use flex-grow to make width proportional to actual pixel width
+                colorBlock.style.flexGrow = color.count || 1;
+
                 colorBlock.style.cursor = 'pointer';
                 colorBlock.title = `${color.name} (${color.hex})`;
+
+                // Style for text display
+                colorBlock.style.display = 'flex';
+                colorBlock.style.alignItems = 'center';
+                colorBlock.style.justifyContent = 'center';
+                colorBlock.style.fontSize = '0.75rem';
+                colorBlock.style.fontWeight = '500';
+                colorBlock.style.overflow = 'hidden';
+                colorBlock.style.textAlign = 'center';
+                colorBlock.style.whiteSpace = 'nowrap'; // Prevent text wrapping
+                colorBlock.style.padding = '0 4px';
+
+                // Determine text color based on brightness
+                const brightness = (color.r * 299 + color.g * 587 + color.b * 114) / 1000;
+                colorBlock.style.color = brightness > 128 ? '#000' : '#fff';
+
+                colorBlock.textContent = color.name;
+
                 colorBlock.addEventListener('click', () => copyToClipboard(color.hex));
-                column.appendChild(colorBlock);
+                row.appendChild(colorBlock);
             });
 
-            scanChartContainer.appendChild(column);
+            scanChartContainer.appendChild(row);
         });
     }
 
