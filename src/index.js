@@ -51,18 +51,17 @@ async function handleScan(request) {
         }
 
         const sliceResults = slices.map(slicePixels => {
-            // Analyze each slice
+            // Use improved analyzePixels that detects actual colors and preserves position
             const bands = analyzePixels(slicePixels);
 
             // Map to format expected by frontend for visualization
-            // The frontend expects 'colors' array with {r,g,b,name,hex}
             const colors = bands.map(b => ({
                 r: b.rgb.r,
                 g: b.rgb.g,
                 b: b.rgb.b,
                 name: b.colorName,
                 hex: rgbToHex(b.rgb.r, b.rgb.g, b.rgb.b),
-                count: b.width // Use width as count
+                count: b.width
             }));
 
             // Identify the dominant color (likely body color) by width
@@ -126,33 +125,69 @@ function analyzePixels(pixels) {
     const segments = [];
     let currentSegment = null;
 
-    // 1. Classify each pixel
-    const classifiedPixels = pixels.map(p => findClosestColor(p));
+    // 1. Group pixels by actual color similarity (not forcing resistor colors yet)
+    // Use a threshold for grouping similar colors
+    const colorThreshold = 30; // RGB distance threshold for grouping
 
-    // 2. Run-Length Encoding
-    for (const p of classifiedPixels) {
+    for (const pixel of pixels) {
         if (!currentSegment) {
-            currentSegment = { ...p, count: 1 };
-        } else if (p.name === currentSegment.name) {
-            currentSegment.count++;
+            currentSegment = {
+                r: pixel.r,
+                g: pixel.g,
+                b: pixel.b,
+                count: 1,
+                sumR: pixel.r,
+                sumG: pixel.g,
+                sumB: pixel.b
+            };
         } else {
-            segments.push(currentSegment);
-            currentSegment = { ...p, count: 1 };
+            // Check if this pixel is similar to current segment
+            const dist = Math.sqrt(
+                Math.pow(pixel.r - currentSegment.r, 2) +
+                Math.pow(pixel.g - currentSegment.g, 2) +
+                Math.pow(pixel.b - currentSegment.b, 2)
+            );
+
+            if (dist < colorThreshold) {
+                // Add to current segment and update average color
+                currentSegment.count++;
+                currentSegment.sumR += pixel.r;
+                currentSegment.sumG += pixel.g;
+                currentSegment.sumB += pixel.b;
+                currentSegment.r = Math.round(currentSegment.sumR / currentSegment.count);
+                currentSegment.g = Math.round(currentSegment.sumG / currentSegment.count);
+                currentSegment.b = Math.round(currentSegment.sumB / currentSegment.count);
+            } else {
+                // Start new segment
+                segments.push(currentSegment);
+                currentSegment = {
+                    r: pixel.r,
+                    g: pixel.g,
+                    b: pixel.b,
+                    count: 1,
+                    sumR: pixel.r,
+                    sumG: pixel.g,
+                    sumB: pixel.b
+                };
+            }
         }
     }
     if (currentSegment) segments.push(currentSegment);
 
-    // 3. Filter Noise
+    // 2. Filter Noise
     const width = pixels.length;
     const threshold = width * 0.015; // 1.5% threshold
-
     const filtered = segments.filter(s => s.count > threshold);
 
-    return filtered.map(s => ({
-        colorName: s.name,
-        rgb: { r: s.r, g: s.g, b: s.b },
-        width: s.count
-    }));
+    // 3. Map each segment to nearest resistor color (preserving order)
+    return filtered.map(s => {
+        const resistorColor = findClosestResistorColor({ r: s.r, g: s.g, b: s.b });
+        return {
+            colorName: resistorColor.name,
+            rgb: { r: s.r, g: s.g, b: s.b }, // Keep actual detected color
+            width: s.count
+        };
+    });
 }
 
 function findClosestColor(pixel) {
@@ -173,6 +208,11 @@ function findClosestColor(pixel) {
         }
     }
     return closest;
+}
+
+// Helper function to map any color to nearest resistor color
+function findClosestResistorColor(pixel) {
+    return findClosestColor(pixel);
 }
 
 function aggregateBands(sliceResults) {
