@@ -222,10 +222,12 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log(`Sending ${pixels.length} pixels to server...`);
 
         try {
-            const response = await fetch('/api/analyze', {
+            const colorCount = parseInt(colorCountSlider ? colorCountSlider.value : 5);
+
+            const response = await fetch('/api/extract-colors', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ pixels })
+                body: JSON.stringify({ pixels, colorCount })
             });
 
             if (!response.ok) {
@@ -235,20 +237,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await response.json();
             console.log('Server response:', data);
 
-            // The worker returns 'bands' which are the dominant colors in this context
-            // We map them to the format expected by renderPalette
-            const dominantColors = data.bands.map(b => ({
-                r: b.rgb.r,
-                g: b.rgb.g,
-                b: b.rgb.b,
-                count: b.width, // Using width as count proxy
-                hex: rgbToHex(b.rgb.r, b.rgb.g, b.rgb.b)
-            }));
-
-            // Sort by count (width) descending
-            dominantColors.sort((a, b) => b.count - a.count);
-
-            const totalPixels = dominantColors.reduce((sum, c) => sum + c.count, 0);
+            const dominantColors = data.colors;
+            const totalPixels = data.totalPixels;
 
             renderPalette(dominantColors, totalPixels);
             renderColorBar(dominantColors, totalPixels);

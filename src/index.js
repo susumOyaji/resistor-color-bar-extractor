@@ -11,6 +11,9 @@ export default {
             if (url.pathname === '/api/scan') {
                 return handleScan(request);
             }
+            if (url.pathname === '/api/extract-colors') {
+                return handleExtractColors(request);
+            }
         }
 
         return new Response('Not Found', { status: 404 });
@@ -108,10 +111,10 @@ const RESISTOR_COLORS = [
     { name: 'Brown', r: 139, g: 69, b: 19, value: 1, tolerance: 1 },
     { name: 'Red', r: 255, g: 0, b: 0, value: 2, tolerance: 2 },
     { name: 'Orange', r: 255, g: 165, b: 0, value: 3 },
-    { name: 'Yellow', r: 255, g: 255, b: 0, value: 4 },
+    { name: 'Yellow', r: 225, g: 191, b: 5, value: 4 },
     { name: 'Green', r: 0, g: 128, b: 0, value: 5, tolerance: 0.5 },
     { name: 'Blue', r: 0, g: 0, b: 255, value: 6, tolerance: 0.25 },
-    { name: 'Violet', r: 238, g: 130, b: 238, value: 7, tolerance: 0.1 },
+    { name: 'Violet', r: 154, g: 71, b: 160, value: 7, tolerance: 0.1 },
     { name: 'Gray', r: 128, g: 128, b: 128, value: 8, tolerance: 0.05 },
     { name: 'White', r: 255, g: 255, b: 255, value: 9 },
     { name: 'Gold', r: 218, g: 165, b: 32, tolerance: 5 },
@@ -247,3 +250,119 @@ function formatResistance(ohms) {
 function rgbToHex(r, g, b) {
     return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1).toUpperCase();
 }
+
+// --- General Color Extraction (K-means) ---
+
+async function handleExtractColors(request) {
+    try {
+        const { pixels, colorCount } = await request.json();
+
+        if (!pixels || !Array.isArray(pixels)) {
+            return new Response('Invalid data', { status: 400 });
+        }
+
+        const k = colorCount || 5;
+        const dominantColors = extractDominantColors(pixels, k);
+
+        return new Response(JSON.stringify({
+            success: true,
+            colors: dominantColors,
+            totalPixels: pixels.length
+        }), {
+            headers: { 'Content-Type': 'application/json' }
+        });
+    } catch (e) {
+        return new Response(JSON.stringify({ error: e.message }), { status: 500 });
+    }
+}
+
+function extractDominantColors(pixels, k) {
+    // Simple K-means clustering for color extraction
+    const maxIterations = 10;
+
+    // Initialize centroids randomly
+    let centroids = [];
+    const step = Math.floor(pixels.length / k);
+    for (let i = 0; i < k; i++) {
+        const idx = Math.min(i * step, pixels.length - 1);
+        centroids.push({ ...pixels[idx] });
+    }
+
+    // K-means iterations
+    for (let iter = 0; iter < maxIterations; iter++) {
+        // Assign pixels to nearest centroid
+        const clusters = Array.from({ length: k }, () => []);
+
+        for (const pixel of pixels) {
+            let minDist = Infinity;
+            let closestIdx = 0;
+
+            for (let i = 0; i < k; i++) {
+                const dist = colorDistance(pixel, centroids[i]);
+                if (dist < minDist) {
+                    minDist = dist;
+                    closestIdx = i;
+                }
+            }
+
+            clusters[closestIdx].push(pixel);
+        }
+
+        // Update centroids
+        let changed = false;
+        for (let i = 0; i < k; i++) {
+            if (clusters[i].length === 0) continue;
+
+            const newCentroid = {
+                r: Math.round(clusters[i].reduce((sum, p) => sum + p.r, 0) / clusters[i].length),
+                g: Math.round(clusters[i].reduce((sum, p) => sum + p.g, 0) / clusters[i].length),
+                b: Math.round(clusters[i].reduce((sum, p) => sum + p.b, 0) / clusters[i].length)
+            };
+
+            if (colorDistance(newCentroid, centroids[i]) > 1) {
+                changed = true;
+            }
+            centroids[i] = newCentroid;
+        }
+
+        if (!changed) break;
+    }
+
+    // Count pixels per cluster
+    const clusters = Array.from({ length: k }, () => []);
+    for (const pixel of pixels) {
+        let minDist = Infinity;
+        let closestIdx = 0;
+
+        for (let i = 0; i < k; i++) {
+            const dist = colorDistance(pixel, centroids[i]);
+            if (dist < minDist) {
+                minDist = dist;
+                closestIdx = i;
+            }
+        }
+
+        clusters[closestIdx].push(pixel);
+    }
+
+    // Return colors sorted by frequency
+    return centroids
+        .map((color, i) => ({
+            r: color.r,
+            g: color.g,
+            b: color.b,
+            count: clusters[i].length,
+            hex: rgbToHex(color.r, color.g, color.b)
+        }))
+        .filter(c => c.count > 0)
+        .sort((a, b) => b.count - a.count);
+}
+
+function colorDistance(c1, c2) {
+    return Math.sqrt(
+        Math.pow(c1.r - c2.r, 2) +
+        Math.pow(c1.g - c2.g, 2) +
+        Math.pow(c1.b - c2.b, 2)
+    );
+}
+

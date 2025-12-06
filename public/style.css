@@ -225,6 +225,13 @@ body {
 .results-container {
     display: flex;
     flex-direction: column;
+    min-width: 0; /* Prevent grid blowout */
+    width: 100%;
+}
+
+#scan-chart {
+    width: 100%;
+    max-width: 100%;
 }
 
 .section-title {
