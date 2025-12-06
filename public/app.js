@@ -410,6 +410,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <span class="percentage">${percentage}%</span>
                 </div>
                 <div class="color-info">
+                    ${color.name ? `<div class="color-name" style="font-size: 0.85rem; font-weight: 600; margin-bottom: 0.25rem; color: var(--text-primary);">${color.name}</div>` : ''}
                     <div class="hex-code">${hex}</div>
                     <div class="rgb-code">${rgbString}</div>
                 </div>

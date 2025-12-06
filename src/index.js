@@ -304,9 +304,18 @@ async function handleExtractColors(request) {
         const k = colorCount || 5;
         const dominantColors = extractDominantColors(pixels, k);
 
+        // Map each color to nearest resistor color name
+        const colorsWithNames = dominantColors.map(color => {
+            const resistorColor = findClosestResistorColor({ r: color.r, g: color.g, b: color.b });
+            return {
+                ...color,
+                name: resistorColor.name // Add resistor color name
+            };
+        });
+
         return new Response(JSON.stringify({
             success: true,
-            colors: dominantColors,
+            colors: colorsWithNames,
             totalPixels: pixels.length
         }), {
             headers: { 'Content-Type': 'application/json' }
