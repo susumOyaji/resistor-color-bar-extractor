@@ -1,4 +1,4 @@
-document.addEventListener('DOMContentLoaded', () => {
+﻿document.addEventListener('DOMContentLoaded', () => {
     console.log('DOMContentLoaded fired');
 
     // Elements
@@ -14,12 +14,54 @@ document.addEventListener('DOMContentLoaded', () => {
     const resetCropBtn = document.getElementById('reset-crop-btn');
     const scanSlicesSelect = document.getElementById('scan-slices-select');
 
+    // Analyzed Image Elements
+    const analyzedImageContainer = document.getElementById('analyzed-image-container');
+    const analyzedImage = document.getElementById('analyzed-image');
+    const analyzedOverlay = document.getElementById('analyzed-overlay');
+
+    // Learning Mode Elements
+    const learningModeToggle = document.getElementById('learning-mode-toggle');
+    const clearLearningBtn = document.getElementById('clear-learning-btn');
+
     console.log('Elements:', { dropZone, fileInput, analysisSection, imagePreview });
 
     // State
     let currentImage = null;
     let cropper = null;
     const analyzeBtn = document.getElementById('analyze-btn');
+
+    // Learning Mode State
+    let isLearningMode = false;
+    let customColors = JSON.parse(localStorage.getItem('resistor_custom_colors') || '[]');
+
+    console.log('analyzeBtn:', analyzeBtn);
+
+    // Valid Resistor Colors for Learning
+    const RESISTOR_COLOR_NAMES = [
+        'Black', 'Brown', 'Red', 'Orange', 'Yellow',
+        'Green', 'Blue', 'Violet', 'Gray', 'White',
+        'Gold', 'Silver', 'Beige (Body)'
+    ];
+
+    if (learningModeToggle) {
+        learningModeToggle.addEventListener('change', (e) => {
+            isLearningMode = e.target.checked;
+            console.log(`Learning Mode toggled: ${isLearningMode}`);
+            clearLearningBtn.style.display = isLearningMode && customColors.length > 0 ? 'inline-block' : 'none';
+        });
+    }
+
+    if (clearLearningBtn) {
+        clearLearningBtn.style.display = customColors.length > 0 ? 'inline-block' : 'none'; // Initial state based on data
+        clearLearningBtn.addEventListener('click', () => {
+            if (confirm('Are you sure you want to clear all learned color corrections?')) {
+                customColors = [];
+                localStorage.removeItem('resistor_custom_colors');
+                clearLearningBtn.style.display = 'none';
+                showToast('Learning data cleared.');
+            }
+        });
+    }
 
     console.log('analyzeBtn:', analyzeBtn);
 
@@ -212,10 +254,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const pixels = [];
 
         for (let i = 0; i < imageData.data.length; i += 4) {
+            const pixelIndex = i / 4;
+            const x = pixelIndex % canvas.width;
+            // const y = Math.floor(pixelIndex / canvas.width); // Not needed for horizontal sort
+
             pixels.push({
                 r: imageData.data[i],
                 g: imageData.data[i + 1],
-                b: imageData.data[i + 2]
+                b: imageData.data[i + 2],
+                x: x // Add x coordinate for position sorting
             });
         }
 
@@ -227,7 +274,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const response = await fetch('/api/extract-colors', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ pixels, colorCount })
+                body: JSON.stringify({ pixels, colorCount, customColors })
             });
 
             if (!response.ok) {
@@ -240,8 +287,38 @@ document.addEventListener('DOMContentLoaded', () => {
             const dominantColors = data.colors;
             const totalPixels = data.totalPixels;
 
-            renderPalette(dominantColors, totalPixels);
+            // Update Analyzed Image
+            if (analyzedImage && analyzedImageContainer) {
+                analyzedImage.src = canvas.toDataURL();
+                analyzedImageContainer.style.display = 'block';
+                if (analyzedOverlay) analyzedOverlay.innerHTML = '';
+            }
+
+            renderPalette(dominantColors, totalPixels, canvas.width);
             renderColorBar(dominantColors, totalPixels);
+
+            // Display resistor value for Dominant Colors
+            const dominantResultContainer = document.getElementById('dominant-result');
+            const dominantValueEl = document.getElementById('dominant-resistor-value');
+            const dominantBandsEl = document.getElementById('dominant-detected-bands');
+
+            console.log('Dominant Colors - resistor_value:', data.resistor_value);
+            console.log('Dominant Colors - detected_bands:', data.detected_bands);
+
+            if (dominantResultContainer && dominantValueEl && dominantBandsEl) {
+                if (data.resistor_value) {
+                    dominantResultContainer.style.display = 'block';
+                    dominantValueEl.textContent = data.resistor_value;
+                    dominantBandsEl.innerHTML = `Detected sequence: <span style="color:white;">${data.detected_bands.join(' → ')}</span>`;
+                } else if (data.detected_bands && data.detected_bands.length > 0) {
+                    // Show failed state if we have bands but no value
+                    dominantResultContainer.style.display = 'block';
+                    dominantValueEl.textContent = "Detection Failed";
+                    dominantBandsEl.innerHTML = `Detected bands: <span style="color:rgba(255,255,255,0.5);">${data.detected_bands.join(' → ')}</span><br><small style="opacity:0.7">Result unavailable (need ≥3 valid bands)</small>`;
+                } else {
+                    dominantResultContainer.style.display = 'none';
+                }
+            }
 
             if (dominantColors.length > 0) {
                 generateHarmonies(dominantColors[0]);
@@ -264,6 +341,12 @@ document.addEventListener('DOMContentLoaded', () => {
         // Get full resolution cropped canvas
         const canvas = cropper.getCroppedCanvas();
         if (!canvas) return;
+
+        // Show analyzed image
+        if (analyzedImage && analyzedImageContainer) {
+            analyzedImage.src = canvas.toDataURL();
+            analyzedImageContainer.style.display = 'block';
+        }
 
         const ctx = canvas.getContext('2d');
         const numSlices = parseInt(scanSlicesSelect ? scanSlicesSelect.value : 10);
@@ -293,7 +376,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const response = await fetch('/api/scan', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ slices: slicesData })
+                body: JSON.stringify({ slices: slicesData, customColors })
             });
 
             if (!response.ok) {
@@ -335,6 +418,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
         scanChartContainer.innerHTML = '';
+
+        // Reset Overlay
+        if (analyzedOverlay) {
+            analyzedOverlay.innerHTML = '';
+            analyzedOverlay.style.flexDirection = 'column';
+        }
         scanChartContainer.style.display = 'flex';
         scanChartContainer.style.flexDirection = 'column'; // Stack slices vertically
         scanChartContainer.style.gap = '0.5rem';
@@ -344,6 +433,36 @@ document.addEventListener('DOMContentLoaded', () => {
 
         slices.forEach((slice, index) => {
             const row = document.createElement('div');
+
+            // Create Overlay Slice
+            let overlaySlice = null;
+            if (analyzedOverlay) {
+                overlaySlice = document.createElement('div');
+                overlaySlice.style.width = '100%';
+                overlaySlice.style.flexGrow = '1';
+                overlaySlice.style.borderTop = index > 0 ? '1px dashed rgba(255,255,255,0.3)' : 'none';
+                overlaySlice.style.boxSizing = 'border-box';
+                overlaySlice.style.transition = 'all 0.1s';
+                analyzedOverlay.appendChild(overlaySlice);
+
+                // Link hover events
+                row.addEventListener('mouseenter', () => {
+                    if (overlaySlice) {
+                        overlaySlice.style.background = 'rgba(255, 255, 0, 0.3)';
+                        overlaySlice.style.border = '2px solid yellow';
+                    }
+                    row.style.outline = '2px solid yellow'; // Highlight chart row too
+                });
+                row.addEventListener('mouseleave', () => {
+                    if (overlaySlice) {
+                        overlaySlice.style.background = 'transparent';
+                        overlaySlice.style.border = 'none';
+                        overlaySlice.style.borderTop = index > 0 ? '1px dashed rgba(255,255,255,0.3)' : 'none';
+                    }
+                    row.style.outline = 'none';
+                });
+            }
+
             row.style.display = 'flex';
             row.style.flexDirection = 'row'; // Arrange colors horizontally
             row.style.height = '50px'; // Fixed height for each slice
@@ -380,7 +499,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 colorBlock.textContent = color.name;
 
-                colorBlock.addEventListener('click', () => copyToClipboard(color.hex));
+                colorBlock.addEventListener('click', () => {
+                    console.log(`Scan Chart bar clicked. Mode: ${isLearningMode ? 'Learning' : 'Copy'}`);
+                    if (isLearningMode) {
+                        handleColorCorrection(color);
+                    } else {
+                        copyToClipboard(color.hex);
+                    }
+                });
                 row.appendChild(colorBlock);
             });
 
@@ -388,16 +514,44 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    function renderPalette(colors, totalPixels) {
+    function renderPalette(colors, totalPixels, imageWidth) {
         paletteGrid.innerHTML = '';
 
-        // Analyze button is now static in HTML
-
+        // Reset Overlay
+        if (analyzedOverlay) {
+            analyzedOverlay.innerHTML = '';
+        }
 
         colors.forEach((color, index) => {
             const percentage = ((color.count / totalPixels) * 100).toFixed(1);
             const hex = color.hex || rgbToHex(color.r, color.g, color.b);
             const rgbString = `rgb(${color.r}, ${color.g}, ${color.b})`;
+
+            // Create Overlay Strip for Dominant Colors
+            let overlayStrip = null;
+            if (analyzedOverlay && imageWidth && color.avgX !== undefined) {
+                overlayStrip = document.createElement('div');
+                const widthPercent = 4; // Fixed width highlight strip
+                // Center position based on avgX
+                const centerPercent = (color.avgX / imageWidth) * 100;
+                // Calculate left
+                const leftPercent = Math.max(0, Math.min(100, centerPercent - (widthPercent / 2)));
+
+                overlayStrip.style.position = 'absolute';
+                overlayStrip.style.left = `${leftPercent}%`;
+                overlayStrip.style.top = '0';
+                overlayStrip.style.height = '100%';
+                overlayStrip.style.width = `${widthPercent}%`;
+                overlayStrip.style.background = `rgba(255, 255, 0, 0.3)`; // Yellow tint
+                overlayStrip.style.border = `2px solid rgba(255, 255, 0, 0.8)`;
+                overlayStrip.style.boxSizing = 'border-box';
+                overlayStrip.style.opacity = '0'; // Hidden by default
+                overlayStrip.style.transition = 'opacity 0.2s';
+                overlayStrip.style.pointerEvents = 'none';
+                overlayStrip.style.boxShadow = '0 0 10px rgba(255, 255, 0, 0.5)';
+
+                analyzedOverlay.appendChild(overlayStrip);
+            }
 
             // Create Card
             const card = document.createElement('div');
@@ -416,8 +570,27 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
             `;
 
+            // Hover Events for Overlay
+            if (overlayStrip) {
+                card.addEventListener('mouseenter', () => {
+                    overlayStrip.style.opacity = '1';
+                    card.style.outline = '2px solid yellow';
+                    card.style.zIndex = '10';
+                });
+                card.addEventListener('mouseleave', () => {
+                    overlayStrip.style.opacity = '0';
+                    card.style.outline = 'none';
+                    card.style.zIndex = '1';
+                });
+            }
+
             card.addEventListener('click', () => {
-                copyToClipboard(hex);
+                console.log(`Palette card clicked. Mode: ${isLearningMode ? 'Learning' : 'Copy'}`);
+                if (isLearningMode) {
+                    handleColorCorrection(color);
+                } else {
+                    copyToClipboard(hex);
+                }
             });
 
             paletteGrid.appendChild(card);
@@ -653,4 +826,106 @@ document.addEventListener('DOMContentLoaded', () => {
             showToast("Demo image not found");
         }
     });
+
+    // Modal Elements for Learning Mode
+    const learningModal = document.getElementById('learning-modal');
+    const modalColorInfo = document.getElementById('modal-color-info');
+    const correctColorSelect = document.getElementById('correct-color-select');
+    const modalSaveBtn = document.getElementById('modal-save-btn');
+    const modalCancelBtn = document.getElementById('modal-cancel-btn');
+
+    let pendingCorrectionColor = null;
+
+    if (correctColorSelect) {
+        // Clear existing options first to be safe
+        correctColorSelect.innerHTML = '';
+        // Populate select options
+        RESISTOR_COLOR_NAMES.forEach(name => {
+            const option = document.createElement('option');
+            option.value = name;
+            option.textContent = name;
+            correctColorSelect.appendChild(option);
+        });
+    }
+
+    if (modalCancelBtn) {
+        modalCancelBtn.addEventListener('click', () => {
+            if (learningModal) learningModal.style.display = 'none';
+            pendingCorrectionColor = null;
+        });
+    }
+
+    if (modalSaveBtn) {
+        modalSaveBtn.addEventListener('click', () => {
+            if (!pendingCorrectionColor) return;
+
+            const selectedName = correctColorSelect.value;
+            console.log(`Saving correction: ${selectedName} for`, pendingCorrectionColor);
+
+            // Add correction
+            customColors.push({
+                name: selectedName,
+                r: pendingCorrectionColor.r,
+                g: pendingCorrectionColor.g,
+                b: pendingCorrectionColor.b
+            });
+
+            // Save to localStorage
+            localStorage.setItem('resistor_custom_colors', JSON.stringify(customColors));
+
+            // Show reset button
+            if (clearLearningBtn) clearLearningBtn.style.display = 'inline-block';
+
+            // Close modal
+            if (learningModal) learningModal.style.display = 'none';
+            pendingCorrectionColor = null;
+
+            showToast(`Learned: This color is now ${selectedName}. Please Re-Analyze.`);
+        });
+    }
+
+    // Close modal when clicking outside
+    window.addEventListener('click', (e) => {
+        if (e.target == learningModal) {
+            learningModal.style.display = 'none';
+            pendingCorrectionColor = null;
+        }
+    });
+
+    function handleColorCorrection(targetColor) {
+        console.log('handleColorCorrection called for:', targetColor);
+
+        if (!learningModal) {
+            console.error('Modal not found, falling back to prompt');
+            alert('Learning modal not found. Please reload.');
+            return;
+        }
+
+        pendingCorrectionColor = targetColor;
+
+        if (modalColorInfo) {
+            modalColorInfo.textContent = `Creating rule for detected color: ${targetColor.name}`;
+            const sub = document.createElement('div');
+            sub.style.fontSize = '0.8rem';
+            sub.style.opacity = '0.7';
+            sub.style.marginTop = '0.2rem';
+            sub.textContent = `RGB: ${targetColor.r}, ${targetColor.g}, ${targetColor.b}`;
+            modalColorInfo.appendChild(sub);
+        }
+
+        // Pre-select current name
+        if (correctColorSelect) {
+            correctColorSelect.value = 'Brown';
+            // Try to match
+            for (let i = 0; i < correctColorSelect.options.length; i++) {
+                if (correctColorSelect.options[i].value === targetColor.name) {
+                    correctColorSelect.selectedIndex = i;
+                    break;
+                }
+            }
+        }
+
+        learningModal.style.display = 'block';
+    }
 });
+

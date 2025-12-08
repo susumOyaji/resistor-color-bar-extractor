@@ -44,7 +44,7 @@ async function handleAnalysis(request) {
 
 async function handleScan(request) {
     try {
-        const { slices } = await request.json();
+        const { slices, customColors } = await request.json();
 
         if (!slices || !Array.isArray(slices)) {
             return new Response('Invalid data', { status: 400 });
@@ -52,7 +52,7 @@ async function handleScan(request) {
 
         const sliceResults = slices.map(slicePixels => {
             // Use improved analyzePixels that detects actual colors and preserves position
-            const bands = analyzePixels(slicePixels);
+            const bands = analyzePixels(slicePixels, customColors);
 
             // Map to format expected by frontend for visualization
             const colors = bands.map(b => ({
@@ -108,6 +108,8 @@ async function handleScan(request) {
 const RESISTOR_COLORS = [
     { name: 'Black', r: 0, g: 0, b: 0, value: 0 },
     { name: 'Brown', r: 139, g: 69, b: 19, value: 1, tolerance: 1 },
+    { name: 'Brown', r: 93, g: 79, b: 67, value: 1, tolerance: 1 }, // #5D4F43
+    { name: 'Brown', r: 67, g: 50, b: 39, value: 1, tolerance: 1 }, // #433227
     { name: 'Red', r: 255, g: 0, b: 0, value: 2, tolerance: 2 },
     { name: 'Orange', r: 255, g: 165, b: 0, value: 3 },
     { name: 'Yellow', r: 225, g: 191, b: 5, value: 4 },
@@ -121,7 +123,7 @@ const RESISTOR_COLORS = [
     { name: 'Beige (Body)', r: 225, g: 204, b: 153 } // Adjusted Beige
 ];
 
-function analyzePixels(pixels) {
+function analyzePixels(pixels, customColors = []) {
     const segments = [];
     let currentSegment = null;
 
@@ -181,7 +183,7 @@ function analyzePixels(pixels) {
 
     // 3. Map each segment to nearest resistor color (preserving order)
     return filtered.map(s => {
-        const resistorColor = findClosestResistorColor({ r: s.r, g: s.g, b: s.b });
+        const resistorColor = findClosestColor({ r: s.r, g: s.g, b: s.b }, customColors);
         return {
             colorName: resistorColor.name,
             rgb: { r: s.r, g: s.g, b: s.b }, // Keep actual detected color
@@ -190,11 +192,14 @@ function analyzePixels(pixels) {
     });
 }
 
-function findClosestColor(pixel) {
-    let minDist = Infinity;
-    let closest = RESISTOR_COLORS[0];
+function findClosestColor(pixel, customColors = []) {
+    // Combine default colors with custom colors provided by the client
+    const allColors = [...(customColors || []), ...RESISTOR_COLORS];
 
-    for (const color of RESISTOR_COLORS) {
+    let minDist = Infinity;
+    let closest = allColors[0];
+
+    for (const color of allColors) {
         // Simple Euclidean distance
         // Could be improved with Lab color space, but RGB is fast
         const dist = Math.sqrt(
@@ -243,8 +248,20 @@ function aggregateBands(sliceResults) {
 function calculateResistorValue(bands) {
     if (!bands || bands.length < 3) return null;
 
+    // Filter out invalid colors (background/body colors)
+    const invalidColors = ['White', 'Beige (Body)', 'Beige'];
+    const validBands = bands.filter(band => !invalidColors.includes(band));
+
+    console.log(`[calculateResistorValue] Input bands: [${bands.join(', ')}]`);
+    console.log(`[calculateResistorValue] Valid bands after filtering: [${validBands.join(', ')}] (${validBands.length})`);
+
+    if (validBands.length < 3) {
+        console.log(`[calculateResistorValue] Not enough valid bands (need ≥3, got ${validBands.length})`);
+        return null;
+    }
+
     // Map names back to color objects
-    const colorObjs = bands.map(name => RESISTOR_COLORS.find(c => c.name === name));
+    const colorObjs = validBands.map(name => RESISTOR_COLORS.find(c => c.name === name));
 
     // Filter out undefined (shouldn't happen)
     if (colorObjs.some(c => !c)) return "Unknown Colors";
@@ -259,14 +276,14 @@ function calculateResistorValue(bands) {
     const lastBand = colorObjs[colorObjs.length - 1];
     const isTolerance = ['Gold', 'Silver'].includes(lastBand.name);
 
-    if (bands.length === 3) {
+    if (validBands.length === 3) {
         // D, D, M
         resistance = (colorObjs[0].value * 10 + colorObjs[1].value) * Math.pow(10, colorObjs[2].value);
-    } else if (bands.length === 4) {
+    } else if (validBands.length === 4) {
         // D, D, M, T
         resistance = (colorObjs[0].value * 10 + colorObjs[1].value) * Math.pow(10, colorObjs[2].value);
         if (lastBand.tolerance) tolerance = lastBand.tolerance;
-    } else if (bands.length === 5) {
+    } else if (validBands.length === 5) {
         // D, D, D, M, T
         resistance = (colorObjs[0].value * 100 + colorObjs[1].value * 10 + colorObjs[2].value) * Math.pow(10, colorObjs[3].value);
         if (lastBand.tolerance) tolerance = lastBand.tolerance;
@@ -295,7 +312,7 @@ function rgbToHex(r, g, b) {
 
 async function handleExtractColors(request) {
     try {
-        const { pixels, colorCount } = await request.json();
+        const { pixels, colorCount, customColors } = await request.json();
 
         if (!pixels || !Array.isArray(pixels)) {
             return new Response('Invalid data', { status: 400 });
@@ -305,18 +322,37 @@ async function handleExtractColors(request) {
         const dominantColors = extractDominantColors(pixels, k);
 
         // Map each color to nearest resistor color name
+        // Use customColors here
         const colorsWithNames = dominantColors.map(color => {
-            const resistorColor = findClosestResistorColor({ r: color.r, g: color.g, b: color.b });
+            const resistorColor = findClosestColor({ r: color.r, g: color.g, b: color.b }, customColors);
             return {
                 ...color,
                 name: resistorColor.name // Add resistor color name
             };
         });
 
+        // Identify the most frequent color (likely background/body)
+        const mostFrequentColor = colorsWithNames.reduce((prev, current) =>
+            (prev.count > current.count) ? prev : current
+        );
+
+        // Calculate resistor value, excluding the most frequent color
+        // identifying by object reference is safe here
+        const bandsForCalculation = colorsWithNames
+            .filter(c => c !== mostFrequentColor)
+            .map(c => c.name);
+
+        console.log(`[handleExtractColors] Excluding dominant color: ${mostFrequentColor.name} (Count: ${mostFrequentColor.count})`);
+        console.log(`[handleExtractColors] Bands used for calculation: [${bandsForCalculation.join(', ')}]`);
+
+        const resistorValue = calculateResistorValue(bandsForCalculation);
+
         return new Response(JSON.stringify({
             success: true,
             colors: colorsWithNames,
-            totalPixels: pixels.length
+            totalPixels: pixels.length,
+            detected_bands: colorsWithNames.map(c => c.name), // Show all detected bands in UI
+            resistor_value: resistorValue
         }), {
             headers: { 'Content-Type': 'application/json' }
         });
@@ -395,16 +431,39 @@ function extractDominantColors(pixels, k) {
     }
 
     // Return colors sorted by frequency
-    return centroids
-        .map((color, i) => ({
-            r: color.r,
-            g: color.g,
-            b: color.b,
-            count: clusters[i].length,
-            hex: rgbToHex(color.r, color.g, color.b)
-        }))
-        .filter(c => c.count > 0)
-        .sort((a, b) => b.count - a.count);
+    // Use the most common actual pixel color in each cluster instead of centroid
+    return clusters
+        .map((cluster, i) => {
+            if (cluster.length === 0) return null;
+
+            // Find the most common color in this cluster
+            const colorCounts = {};
+            cluster.forEach(pixel => {
+                const key = `${pixel.r},${pixel.g},${pixel.b}`;
+                if (!colorCounts[key]) {
+                    colorCounts[key] = { r: pixel.r, g: pixel.g, b: pixel.b, count: 0 };
+                }
+                colorCounts[key].count++;
+            });
+
+            // Get the most frequent color
+            const mostCommon = Object.values(colorCounts)
+                .sort((a, b) => b.count - a.count)[0];
+
+            // Calculate average X position for this cluster
+            const avgX = cluster.reduce((sum, p) => sum + (p.x || 0), 0) / cluster.length;
+
+            return {
+                r: mostCommon.r,
+                g: mostCommon.g,
+                b: mostCommon.b,
+                count: cluster.length,
+                avgX: avgX,
+                hex: rgbToHex(mostCommon.r, mostCommon.g, mostCommon.b)
+            };
+        })
+        .filter(c => c !== null)
+        .sort((a, b) => a.avgX - b.avgX); // Sort by average X position (Left to Right)
 }
 
 function colorDistance(c1, c2) {
