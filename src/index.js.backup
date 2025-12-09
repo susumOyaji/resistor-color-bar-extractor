@@ -203,7 +203,11 @@ function findClosestColor(pixel, customColors = []) {
     // 1. Check Custom Colors (High Priority / Bias)
     if (customColors && Array.isArray(customColors)) {
         for (const color of customColors) {
-            const dist = colorDistance(pixel, color);
+            const dist = Math.sqrt(
+                Math.pow(pixel.r - color.r, 2) +
+                Math.pow(pixel.g - color.g, 2) +
+                Math.pow(pixel.b - color.b, 2)
+            );
             // Apply bias: Treat custom colors as closer to ensure they are picked
             // when pixel is reasonably similar.
             const biasedDist = dist * 0.5;
@@ -217,7 +221,11 @@ function findClosestColor(pixel, customColors = []) {
 
     // 2. Check Standard Colors
     for (const color of RESISTOR_COLORS) {
-        const dist = colorDistance(pixel, color);
+        const dist = Math.sqrt(
+            Math.pow(pixel.r - color.r, 2) +
+            Math.pow(pixel.g - color.g, 2) +
+            Math.pow(pixel.b - color.b, 2)
+        );
         if (dist < minDist) {
             minDist = dist;
             closest = color;

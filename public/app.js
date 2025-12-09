@@ -126,6 +126,7 @@
         console.warn('Analyze button not found, event listener not registered');
     }
 
+
     // Scan button event
     const scanBtn = document.getElementById('scan-btn');
     if (scanBtn) {
@@ -135,6 +136,62 @@
                 performScan();
             } else {
                 console.error('No image loaded');
+            }
+        });
+    }
+
+    // Edge Detection button event
+    const edgeDetectBtn = document.getElementById('edge-detect-btn');
+    if (edgeDetectBtn) {
+        edgeDetectBtn.addEventListener('click', () => {
+            console.log('Edge Detection button clicked');
+            if (currentImage) {
+                performEdgeDetection();
+            } else {
+                console.error('No image loaded');
+            }
+        });
+    }
+
+    // Edge Detection Learning Mode Toggle
+    const edgeLearningModeToggle = document.getElementById('edge-learning-mode-toggle');
+    const edgeLearningInputArea = document.getElementById('edge-learning-input-area');
+
+    if (edgeLearningModeToggle && edgeLearningInputArea) {
+        edgeLearningModeToggle.addEventListener('change', (e) => {
+            if (e.target.checked) {
+                edgeLearningInputArea.style.display = 'block';
+            } else {
+                edgeLearningInputArea.style.display = 'none';
+            }
+        });
+    }
+
+    // Edge Detection Learn from Value Button
+    const edgeLearnFromValueBtn = document.getElementById('edge-learn-from-value-btn');
+    const edgeCorrectResistanceInput = document.getElementById('edge-correct-resistance-input');
+    const edgeLearningStatus = document.getElementById('edge-learning-status');
+
+    if (edgeLearnFromValueBtn) {
+        edgeLearnFromValueBtn.addEventListener('click', () => {
+            const inputValue = edgeCorrectResistanceInput.value.trim();
+            if (!inputValue) {
+                showToast('正しい抵抗値を入力してください');
+                return;
+            }
+
+            // Get the last edge detection result
+            const edgeResult = document.getElementById('edge-result');
+            if (!edgeResult || edgeResult.style.display === 'none') {
+                showToast('先にエッジ検出を実行してください');
+                return;
+            }
+
+            // Call learning function (will be implemented in learning.js)
+            if (typeof learnFromEdgeDetection === 'function') {
+                learnFromEdgeDetection(inputValue, edgeLearningStatus);
+            } else {
+                console.error('learnFromEdgeDetection function not found');
             }
         });
     }
@@ -172,11 +229,14 @@
         paletteGrid.innerHTML = '';
         const colorBar = document.getElementById('color-bar');
         if (colorBar) colorBar.innerHTML = '';
-        if (colorBar) colorBar.innerHTML = '';
         const scanChart = document.getElementById('scan-chart');
         if (scanChart) scanChart.innerHTML = '';
         const scanResult = document.getElementById('scan-result');
         if (scanResult) scanResult.style.display = 'none';
+        const edgeResult = document.getElementById('edge-result');
+        if (edgeResult) edgeResult.style.display = 'none';
+        const edgeImageContainer = document.getElementById('edge-image-container');
+        if (edgeImageContainer) edgeImageContainer.style.display = 'none';
         const harmoniesGrid = document.getElementById('harmonies-grid');
         if (harmoniesGrid) harmoniesGrid.innerHTML = '';
     }
@@ -409,6 +469,158 @@
             console.error('Error scanning image:', error);
             showToast('Error scanning image.');
         }
+    }
+
+    // Perform edge detection analysis
+    async function performEdgeDetection() {
+        console.log('performEdgeDetection called');
+        if (!cropper) {
+            console.error('Cropper not initialized!');
+            return;
+        }
+
+        // Get full resolution cropped canvas
+        const canvas = cropper.getCroppedCanvas();
+        if (!canvas) return;
+
+        // Show edge detection image in dedicated container
+        const edgeImageContainer = document.getElementById('edge-image-container');
+        const edgeAnalyzedImage = document.getElementById('edge-analyzed-image');
+
+        if (edgeAnalyzedImage && edgeImageContainer) {
+            edgeAnalyzedImage.src = canvas.toDataURL();
+            edgeImageContainer.style.display = 'block';
+        }
+
+        const ctx = canvas.getContext('2d');
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const pixels = [];
+
+        // Extract all pixels with position
+        for (let i = 0; i < imageData.data.length; i += 4) {
+            const pixelIndex = i / 4;
+            const x = pixelIndex % canvas.width;
+            const y = Math.floor(pixelIndex / canvas.width);
+
+            pixels.push({
+                r: imageData.data[i],
+                g: imageData.data[i + 1],
+                b: imageData.data[i + 2]
+            });
+        }
+
+        console.log(`Sending ${pixels.length} pixels for edge detection...`);
+
+        try {
+            const response = await fetch('/api/detect-edges', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    pixels,
+                    width: canvas.width,
+                    height: canvas.height,
+                    customColors
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error('Edge detection failed');
+            }
+
+            const data = await response.json();
+            console.log('Edge detection response:', data);
+
+            // Render edge visualization on overlay
+            renderEdgeVisualization(data.edges, data.bands, canvas.width, canvas.height);
+
+            // Display resistor result
+            const resultContainer = document.getElementById('edge-result');
+            const valueEl = document.getElementById('edge-resistor-value');
+            const bandsEl = document.getElementById('edge-detected-bands');
+            const vizEl = document.getElementById('edge-visualization');
+
+            if (resultContainer && valueEl && bandsEl && vizEl) {
+                resultContainer.style.display = 'block';
+
+                if (data.resistor_value) {
+                    valueEl.textContent = data.resistor_value;
+                    bandsEl.innerHTML = `Detected sequence: <span style="color:white;">${data.detected_bands.join(' → ')}</span>`;
+                } else {
+                    valueEl.textContent = "Detection Failed";
+                    bandsEl.innerHTML = `Detected bands: <span style="color:rgba(255,255,255,0.5);">${data.detected_bands ? data.detected_bands.join(' → ') : 'None'}</span><br><small style="opacity:0.7">Result unavailable (need ≥3 valid bands)</small>`;
+                }
+
+                // Render band color chips
+                vizEl.innerHTML = '';
+                data.bands.forEach(band => {
+                    const chip = document.createElement('div');
+                    chip.style.cssText = `
+                        display: inline-flex;
+                        align-items: center;
+                        gap: 0.5rem;
+                        padding: 0.5rem 1rem;
+                        background: rgba(${band.rgb.r}, ${band.rgb.g}, ${band.rgb.b}, 0.2);
+                        border: 2px solid rgb(${band.rgb.r}, ${band.rgb.g}, ${band.rgb.b});
+                        border-radius: 8px;
+                        color: white;
+                        font-size: 0.9rem;
+                    `;
+                    chip.innerHTML = `
+                        <div style="width: 24px; height: 24px; background: rgb(${band.rgb.r}, ${band.rgb.g}, ${band.rgb.b}); border-radius: 4px; border: 1px solid rgba(255,255,255,0.3);"></div>
+                        <span>${band.colorName}</span>
+                        <span style="opacity: 0.6; font-size: 0.8rem;">${rgbToHex(band.rgb.r, band.rgb.g, band.rgb.b)}</span>
+                        <span style="opacity: 0.5; font-size: 0.75rem;">(x: ${band.x})</span>
+                    `;
+                    chip.className = 'band-chip';
+                    vizEl.appendChild(chip);
+                });
+            }
+
+        } catch (error) {
+            console.error('Error in edge detection:', error);
+            showToast('Error detecting edges.');
+        }
+    }
+
+    function renderEdgeVisualization(edges, bands, width, height) {
+        const edgeOverlay = document.getElementById('edge-overlay');
+        if (!edgeOverlay) return;
+
+        edgeOverlay.innerHTML = '';
+
+        // Draw edge lines on overlay
+        bands.forEach(band => {
+            const line = document.createElement('div');
+            const xPercent = (band.x / width) * 100;
+
+            line.style.position = 'absolute';
+            line.style.left = `${xPercent}%`;
+            line.style.top = '0';
+            line.style.width = '3px';
+            line.style.height = '100%';
+            line.style.background = `rgb(${band.rgb.r}, ${band.rgb.g}, ${band.rgb.b})`;
+            line.style.boxShadow = '0 0 8px rgba(255, 255, 255, 0.8), 0 0 4px rgba(0, 0, 0, 0.5)';
+            line.style.pointerEvents = 'none';
+            line.style.zIndex = '10';
+
+            // Add label
+            const label = document.createElement('div');
+            label.style.position = 'absolute';
+            label.style.top = '5px';
+            label.style.left = '50%';
+            label.style.transform = 'translateX(-50%)';
+            label.style.background = 'rgba(0, 0, 0, 0.8)';
+            label.style.color = 'white';
+            label.style.padding = '2px 6px';
+            label.style.borderRadius = '4px';
+            label.style.fontSize = '10px';
+            label.style.fontWeight = 'bold';
+            label.style.whiteSpace = 'nowrap';
+            label.textContent = band.colorName;
+
+            line.appendChild(label);
+            edgeOverlay.appendChild(line);
+        });
     }
 
     // Render scan chart
