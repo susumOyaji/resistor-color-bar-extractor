@@ -1,6 +1,7 @@
 const getPixels = require('get-pixels');
 const util = require('util');
 
+
 // Promisify get-pixels for use with async/await
 const getPixelsAsync = util.promisify(getPixels);
 
@@ -12,17 +13,18 @@ const getPixelsAsync = util.promisify(getPixels);
 const RESISTOR_COLORS = [
     { name: 'Black', r: 0, g: 0, b: 0, value: 0 },
     { name: 'Black', r: 50, g: 50, b: 50, value: 0 }, // Darker grey for black
-    { name: 'Brown', r: 153, g: 102, b: 51, value: 1, tolerance: 1 }, // #996633
+    { name: 'Brown', r: 85, g: 36, b: 10, value: 1, tolerance: 1 }, // Updated to match image
     { name: 'Red', r: 255, g: 0, b: 0, value: 2, tolerance: 2 },     // #FF0000
     { name: 'Red', r: 170, g: 0, b: 0, value: 2, tolerance: 2 },     // Darker Red
-    { name: 'Orange', r: 255, g: 153, b: 0, value: 3 },             // #FF9900
+    { name: 'Orange', r: 146, g: 105, b: 59, value: 3 },             // #FF9900 (Updated to match image)
     { name: 'Yellow', r: 255, g: 255, b: 0, value: 4 },             // #FFFF00
     { name: 'Green', r: 0, g: 255, b: 0, value: 5, tolerance: 0.5 },// #00FF00
     { name: 'Blue', r: 0, g: 0, b: 255, value: 6, tolerance: 0.25 }, // #0000FF
     { name: 'Violet', r: 128, g: 0, b: 128, value: 7, tolerance: 0.1 },// A darker, more common violet
     { name: 'Gray', r: 204, g: 204, b: 204, value: 8, tolerance: 0.05 },// #CCCCCC
     { name: 'White', r: 255, g: 255, b: 255, value: 9 },            // #FFFFFF
-    { name: 'Gold', r: 218, g: 165, b: 32, tolerance: 5 },
+    { name: 'Gold', r: 187, g: 171, b: 123, tolerance: 5 }, // Updated to match image
+    { name: 'Gold (Detected)', r: 187, g: 171, b: 123, tolerance: 5 }, // New entry
     { name: 'Silver', r: 192, g: 192, b: 192, tolerance: 10 },
     { name: 'Beige (Body)', r: 200, g: 180, b: 150 } // More distinct beige
 ];
@@ -77,7 +79,7 @@ function findClosestColor(pixel, customColors = []) {
         }
     }
 
-    // console.log(`[DEBUG findClosestColor] Input RGB(${pixel.r},${pixel.g},${pixel.b}) -> Dist to Gold: ${debugDistances['Gold']}, Dist to Beige: ${debugDistances['Beige (Body)']}, Dist to Brown: ${debugDistances['Brown']}. Picked: ${closest.name} (Dist: ${minDist.toFixed(2)})`);
+    console.log(`[DEBUG findClosestColor] Input RGB(${pixel.r},${pixel.g},${pixel.b}) -> Dist to Gold: ${debugDistances['Gold']}, Dist to Beige: ${debugDistances['Beige (Body)']}, Dist to Brown: ${debugDistances['Brown']}. Picked: ${closest.name} (Dist: ${minDist.toFixed(2)})`);
 
     return closest;
 }
@@ -103,8 +105,8 @@ function calculateResistorValue(bands) {
 
     let processingBands = [...colorObjsFull]; 
 
-    const possibleToleranceColors = ['Gold', 'Silver', 'Brown', 'Red'];
-    if (processingBands.length >= 4) { 
+    const possibleToleranceColors = ['Gold', 'Silver', 'Brown', 'Red', 'Green', 'Blue', 'Violet', 'Gray'];
+    if (processingBands.length >= 3) { // Changed condition to >= 3
         const lastBand = processingBands[processingBands.length - 1];
         if (lastBand.tolerance !== undefined && possibleToleranceColors.includes(lastBand.name)) {
             toleranceObj = lastBand;
@@ -112,20 +114,7 @@ function calculateResistorValue(bands) {
         }
     }
     
-    // Find dominant color to exclude as body color
-    const colorCounts = {};
-    processingBands.forEach(band => {
-        colorCounts[band.name] = (colorCounts[band.name] || 0) + 1;
-    });
-    const dominantColorEntry = Object.entries(colorCounts).sort((a,b) => b[1] - a[1])[0];
-    const dominantColor = dominantColorEntry ? dominantColorEntry[0] : null;
-    
-    let validBandsForValue = [];
-    if (dominantColor) {
-        validBandsForValue = processingBands.filter(band => band.name !== dominantColor);
-    } else {
-        validBandsForValue = processingBands;
-    }
+    let validBandsForValue = processingBands;
 
 
     if (validBandsForValue.length < 2) {
@@ -262,6 +251,11 @@ function extractEdgeBands(pixels, width, height, edges, customColors = []) {
 
         const resistorColor = findClosestColor(avgColor, customColors);
         
+        // 抵抗器のボディカラーを除外する
+        if (resistorColor.name === 'Beige (Body)') {
+            return;
+        }
+        
         finalBands.push({
             x: Math.round((seg.start_x + seg.end_x) / 2),
             colorName: resistorColor.name,
@@ -321,6 +315,7 @@ async function runEdgeDetectionTest(imagePath) {
 
         const resistorValue = calculateResistorValue(bands);
 
+
         console.log('\n--- RESULT ---');
         console.log('Detected Bands:', detectedBandNames);
         console.log('Estimated Resistance:', resistorValue || 'Calculation Failed');
@@ -332,5 +327,5 @@ async function runEdgeDetectionTest(imagePath) {
 }
 
 // --- Main Execution ---
-const testImage = 'Resistor-27-Ohm-5.jpg'; 
+const testImage = 'ChatGPT.png'; 
 runEdgeDetectionTest(testImage);
