@@ -1,4 +1,5 @@
 
+
 export default {
     async fetch(request, env, ctx) {
         const url = new URL(request.url);
@@ -6,16 +7,19 @@ export default {
         // Serve API
         if (request.method === 'POST') {
             if (url.pathname === '/api/analyze') {
-                return handleAnalysis(request);
+                return handleAnalysis(request, env);
             }
             if (url.pathname === '/api/scan') {
-                return handleScan(request);
+                return handleScan(request, env);
             }
             if (url.pathname === '/api/extract-colors') {
-                return handleExtractColors(request);
+                return handleExtractColors(request, env);
             }
             if (url.pathname === '/api/detect-edges') {
-                return handleEdgeDetection(request);
+                return handleEdgeDetection(request, env);
+            }
+            if (url.pathname === '/api/learn') {
+                return handleLearn(request, env);
             }
         }
 
@@ -38,7 +42,50 @@ function findDominantColor(bands) {
 
 // --- Main API Handlers ---
 
-async function handleAnalysis(request) {
+async function handleLearn(request, env) {
+    try {
+        const { detectedColor, correctColorName } = await request.json();
+
+        if (!detectedColor || !correctColorName) {
+            return new Response('Invalid learning data', { status: 400 });
+        }
+
+        // Get current definitions, or initialize if null
+        let definitions = await env.LEARNING_STORE.get("custom_colors", { type: "json" }) || [];
+
+        // Add or update the definition
+        const existingIndex = definitions.findIndex(def => 
+            def.r === detectedColor.r && def.g === detectedColor.g && def.b === detectedColor.b
+        );
+
+        const newDefinition = {
+            name: correctColorName,
+            r: detectedColor.r,
+            g: detectedColor.g,
+            b: detectedColor.b,
+        };
+
+        if (existingIndex > -1) {
+            definitions[existingIndex] = newDefinition;
+        } else {
+            definitions.push(newDefinition);
+        }
+
+        // Save back to KV
+        await env.LEARNING_STORE.put("custom_colors", JSON.stringify(definitions));
+
+        return new Response(JSON.stringify({ success: true, message: `Learned that rgb(${detectedColor.r},${detectedColor.g},${detectedColor.b}) is ${correctColorName}` }), {
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+    } catch (e) {
+        console.error(`[handleLearn] Error: ${e.message}`);
+        return new Response(JSON.stringify({ error: e.message }), { status: 500 });
+    }
+}
+
+
+async function handleAnalysis(request, env) {
     // This is a placeholder for the original 'analyze' endpoint.
     // It can be updated to use the new logic if needed.
     return new Response(JSON.stringify({ message: "'analyze' endpoint not fully implemented with new logic." }), {
@@ -46,9 +93,11 @@ async function handleAnalysis(request) {
     });
 }
 
-async function handleScan(request) {
+async function handleScan(request, env) {
     try {
-        const { slices, customColors } = await request.json();
+        const { slices } = await request.json(); // Removed customColors from here
+        const customColors = await env.LEARNING_STORE.get("custom_colors", { type: "json" }) || [];
+
 
         if (!slices || !Array.isArray(slices)) {
             return new Response('Invalid data', { status: 400 });
@@ -103,7 +152,7 @@ async function handleScan(request) {
     }
 }
 
-async function handleExtractColors(request) {
+async function handleExtractColors(request, env) {
     // This is a placeholder for the original 'extract-colors' endpoint.
     return new Response(JSON.stringify({ message: "'extract-colors' endpoint not fully implemented with new logic." }), {
         headers: { 'Content-Type': 'application/json' }
@@ -331,21 +380,29 @@ function extractBands(pixels, width, height, customColors = []) {
 }
 
 
-async function handleEdgeDetection(request) {
+async function handleEdgeDetection(request, env) {
     try {
-        const { pixels, width, height, customColors } = await request.json();
+        const { pixels, width, height } = await request.json(); // Removed customColors
+        const customColors = await env.LEARNING_STORE.get("custom_colors", { type: "json" }) || [];
+
         if (!pixels || !Array.isArray(pixels) || !width || !height) {
             return new Response('Invalid data', { status: 400 });
         }
         
         const bands = extractBands(pixels, width, height, customColors);
         const bandNames = bands.map(b => b.colorName);
-        const resistorValue = calculateResistorValue(bandNames);
+
+        // Find and filter out the dominant color (body color) before calculation
+        const colorObjs = bandNames.map(name => RESISTOR_COLORS.find(c => c.name === name)).filter(Boolean);
+        const dominantColorName = findDominantColor(colorObjs);
+        const filteredBandNames = bandNames.filter(name => name !== dominantColorName);
+
+        const resistorValue = calculateResistorValue(filteredBandNames);
 
         return new Response(JSON.stringify({
             success: true,
             bands: bands,
-            detected_bands: bandNames,
+            detected_bands: bandNames, // Return original bands for UI transparency
             resistor_value: resistorValue
         }), { headers: { 'Content-Type': 'application/json' } });
     } catch (e) {

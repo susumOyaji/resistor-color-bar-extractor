@@ -1,4 +1,4 @@
-﻿document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', () => {
     console.log('DOMContentLoaded fired');
 
     // Elements
@@ -21,7 +21,6 @@
 
     // Learning Mode Elements
     const learningModeToggle = document.getElementById('learning-mode-toggle');
-    const clearLearningBtn = document.getElementById('clear-learning-btn');
 
     console.log('Elements:', { dropZone, fileInput, analysisSection, imagePreview });
 
@@ -32,7 +31,6 @@
 
     // Learning Mode State
     let isLearningMode = false;
-    let customColors = JSON.parse(localStorage.getItem('resistor_custom_colors') || '[]');
 
     console.log('analyzeBtn:', analyzeBtn);
 
@@ -47,19 +45,6 @@
         learningModeToggle.addEventListener('change', (e) => {
             isLearningMode = e.target.checked;
             console.log(`Learning Mode toggled: ${isLearningMode}`);
-            clearLearningBtn.style.display = isLearningMode && customColors.length > 0 ? 'inline-block' : 'none';
-        });
-    }
-
-    if (clearLearningBtn) {
-        clearLearningBtn.style.display = customColors.length > 0 ? 'inline-block' : 'none'; // Initial state based on data
-        clearLearningBtn.addEventListener('click', () => {
-            if (confirm('Are you sure you want to clear all learned color corrections?')) {
-                customColors = [];
-                localStorage.removeItem('resistor_custom_colors');
-                clearLearningBtn.style.display = 'none';
-                showToast('Learning data cleared.');
-            }
         });
     }
 
@@ -334,7 +319,7 @@
             const response = await fetch('/api/extract-colors', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ pixels, colorCount, customColors })
+                body: JSON.stringify({ pixels, colorCount })
             });
 
             if (!response.ok) {
@@ -436,7 +421,7 @@
             const response = await fetch('/api/scan', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ slices: slicesData, customColors })
+                body: JSON.stringify({ slices: slicesData })
             });
 
             if (!response.ok) {
@@ -518,8 +503,7 @@
                 body: JSON.stringify({
                     pixels,
                     width: canvas.width,
-                    height: canvas.height,
-                    customColors
+                    height: canvas.height
                 })
             });
 
@@ -1068,31 +1052,42 @@
     }
 
     if (modalSaveBtn) {
-        modalSaveBtn.addEventListener('click', () => {
+        modalSaveBtn.addEventListener('click', async () => {
             if (!pendingCorrectionColor) return;
 
             const selectedName = correctColorSelect.value;
-            console.log(`Saving correction: ${selectedName} for`, pendingCorrectionColor);
+            console.log(`Saving correction to server: ${selectedName} for`, pendingCorrectionColor);
 
-            // Add correction
-            customColors.push({
-                name: selectedName,
-                r: pendingCorrectionColor.r,
-                g: pendingCorrectionColor.g,
-                b: pendingCorrectionColor.b
-            });
+            try {
+                const response = await fetch('/api/learn', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        detectedColor: {
+                            r: pendingCorrectionColor.r,
+                            g: pendingCorrectionColor.g,
+                            b: pendingCorrectionColor.b
+                        },
+                        correctColorName: selectedName
+                    })
+                });
 
-            // Save to localStorage
-            localStorage.setItem('resistor_custom_colors', JSON.stringify(customColors));
+                if (!response.ok) {
+                    throw new Error('Failed to save learning data.');
+                }
 
-            // Show reset button
-            if (clearLearningBtn) clearLearningBtn.style.display = 'inline-block';
+                const result = await response.json();
+                console.log('Server learning response:', result);
+                showToast(`Learned: This color is now ${selectedName}. Please Re-Analyze.`);
+
+            } catch (error) {
+                console.error('Error saving learning data:', error);
+                showToast('Error saving learning data.');
+            }
 
             // Close modal
             if (learningModal) learningModal.style.display = 'none';
             pendingCorrectionColor = null;
-
-            showToast(`Learned: This color is now ${selectedName}. Please Re-Analyze.`);
         });
     }
 
