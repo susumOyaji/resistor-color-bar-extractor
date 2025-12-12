@@ -72,17 +72,17 @@ async function handleLearn(request, env) {
 // --- Analysis & Calculation Logic ---
 
 const RESISTOR_COLORS = [
-    { name: 'Black',  r: 0,   g: 0,   b: 0,   value: 0, multiplier: 1 },
-    { name: 'Brown',  r: 165, g: 42,  b: 42,  value: 1, multiplier: 10, tolerance: 1 },
-    { name: 'Red',    r: 255, g: 0,   b: 0,   value: 2, multiplier: 100, tolerance: 2 },
-    { name: 'Orange', r: 255, g: 165, b: 0,   value: 3, multiplier: 1000 },
-    { name: 'Yellow', r: 255, g: 255, b: 0,   value: 4, multiplier: 10000 },
-    { name: 'Green',  r: 0,   g: 128, b: 0,   value: 5, multiplier: 100000, tolerance: 0.5 },
-    { name: 'Blue',   r: 0,   g: 0,   b: 255, value: 6, multiplier: 1000000, tolerance: 0.25 },
+    { name: 'Black', r: 0, g: 0, b: 0, value: 0, multiplier: 1 },
+    { name: 'Brown', r: 165, g: 42, b: 42, value: 1, multiplier: 10, tolerance: 1 },
+    { name: 'Red', r: 255, g: 0, b: 0, value: 2, multiplier: 100, tolerance: 2 },
+    { name: 'Orange', r: 255, g: 165, b: 0, value: 3, multiplier: 1000 },
+    { name: 'Yellow', r: 255, g: 255, b: 0, value: 4, multiplier: 10000 },
+    { name: 'Green', r: 0, g: 128, b: 0, value: 5, multiplier: 100000, tolerance: 0.5 },
+    { name: 'Blue', r: 0, g: 0, b: 255, value: 6, multiplier: 1000000, tolerance: 0.25 },
     { name: 'Violet', r: 238, g: 130, b: 238, value: 7, multiplier: 10000000, tolerance: 0.1 },
-    { name: 'Gray',   r: 128, g: 128, b: 128, value: 8, multiplier: 100000000, tolerance: 0.05 },
-    { name: 'White',  r: 255, g: 255, b: 255, value: 9, multiplier: 1000000000 },
-    { name: 'Gold',   r: 255, g: 215, b: 0,   multiplier: 0.1, tolerance: 5 },
+    { name: 'Gray', r: 128, g: 128, b: 128, value: 8, multiplier: 100000000, tolerance: 0.05 },
+    { name: 'White', r: 255, g: 255, b: 255, value: 9, multiplier: 1000000000 },
+    { name: 'Gold', r: 255, g: 215, b: 0, multiplier: 0.1, tolerance: 5 },
     { name: 'Silver', r: 192, g: 192, b: 192, multiplier: 0.01, tolerance: 10 },
     { name: 'Beige (Body)', r: 245, g: 245, b: 220 }
 ];
@@ -120,7 +120,7 @@ function calculateResistorValue(bands) {
     }
 
     let digits = [], multiplierObj, toleranceObj;
-    
+
     switch (colorObjs.length) {
         case 3:
             // Digit, Digit, Multiplier
@@ -208,14 +208,14 @@ function extractBands(pixels, width, height, customColors = [], threshold = 10) 
         if (count > 0) averagedLine.push({ r: Math.round(sumR / count), g: Math.round(sumG / count), b: Math.round(sumB / count), x: x });
         else averagedLine.push({ r: 0, g: 0, b: 0, x: x });
     }
-    
+
     const segments = [];
     if (averagedLine.length === 0) return [];
 
     let currentSegment = { start_x: averagedLine[0].x, end_x: averagedLine[0].x, pixels: [averagedLine[0]] };
     const colorChangeThreshold = threshold; // Use the passed-in threshold
     for (let i = 1; i < averagedLine.length; i++) {
-        const prevColor = averagedLine[i-1];
+        const prevColor = averagedLine[i - 1];
         const currentColor = averagedLine[i];
         if (colorDistance(prevColor, currentColor) > colorChangeThreshold) {
             segments.push(currentSegment);
@@ -228,11 +228,11 @@ function extractBands(pixels, width, height, customColors = [], threshold = 10) 
     segments.push(currentSegment);
 
     const finalBands = [];
-    const minBandWidth = 10;
+    const minBandWidth = 3;
     segments.forEach(seg => {
         const avgColor = averageColor(seg.pixels);
         const l = rgbToLab(avgColor.r, avgColor.g, avgColor.b).l;
-        if (seg.end_x - seg.start_x + 1 < minBandWidth || l < 10 || l > 98) return;
+        if (seg.end_x - seg.start_x + 1 < minBandWidth || l < 1 || l > 99) return;
         const resistorColor = findClosestColor(avgColor, customColors);
         finalBands.push({
             x: Math.round((seg.start_x + seg.end_x) / 2),
@@ -271,27 +271,27 @@ async function handleLearnFromValue(request, env) {
 
         const ohms = parseResistance(correctValue);
         if (ohms === null) return new Response(JSON.stringify({ error: 'Invalid resistance value format.' }), { status: 400 });
-        
+
         let correctColorSequence = resistanceToColors(ohms);
         if (correctColorSequence.length === 0) return new Response(JSON.stringify({ error: 'Could not determine a valid color sequence for the given resistance value.' }), { status: 400 });
-        
+
         if (correctTolerance) {
             const toleranceColor = toleranceToColorName(correctTolerance);
             if (toleranceColor) {
                 correctColorSequence.push(toleranceColor);
             }
         }
-        
+
         let significantDetectedBands = [...detectedBands];
 
         // New Filtering Logic: If more bands are detected than expected,
         // assume the widest bands are the resistor body and remove them.
         if (significantDetectedBands.length > correctColorSequence.length) {
             const bandsToRemove = significantDetectedBands.length - correctColorSequence.length;
-            
+
             // Sort by width descending (widest first)
             significantDetectedBands.sort((a, b) => b.width - a.width);
-            
+
             // Remove the widest bands
             significantDetectedBands.splice(0, bandsToRemove);
 
@@ -310,7 +310,7 @@ async function handleLearnFromValue(request, env) {
             const rgbKey = `${detectedBand.rgb.r},${detectedBand.rgb.g},${detectedBand.rgb.b}`;
             newRules.set(rgbKey, { name: correctColorName, r: detectedBand.rgb.r, g: detectedBand.rgb.g, b: detectedBand.rgb.b });
         }
-        
+
         let existingRules = await env.LEARNING_STORE.get("custom_colors", { type: "json" }) || [];
         const rulesMap = new Map(existingRules.map(rule => [`${rule.r},${rule.g},${rule.b}`, rule]));
         newRules.forEach((rule, key) => rulesMap.set(key, rule));
@@ -340,7 +340,7 @@ function resistanceToColors(ohms) {
         console.error(`Cannot convert value ${ohms}Ω (less than 10) to a standard 4-band code.`);
         return [];
     }
-    const colorMap = [ { name: 'Black', value: 0 }, { name: 'Brown', value: 1 }, { name: 'Red', value: 2 }, { name: 'Orange', value: 3 }, { name: 'Yellow', value: 4 }, { name: 'Green', value: 5 }, { name: 'Blue', value: 6 }, { name: 'Violet', value: 7 }, { name: 'Gray', value: 8 }, { name: 'White', value: 9 } ];
+    const colorMap = [{ name: 'Black', value: 0 }, { name: 'Brown', value: 1 }, { name: 'Red', value: 2 }, { name: 'Orange', value: 3 }, { name: 'Yellow', value: 4 }, { name: 'Green', value: 5 }, { name: 'Blue', value: 6 }, { name: 'Violet', value: 7 }, { name: 'Gray', value: 8 }, { name: 'White', value: 9 }];
     const exponent = Math.floor(Math.log10(ohms));
     const firstTwoDigits = Math.round(ohms / Math.pow(10, exponent - 1));
     if (firstTwoDigits < 10 || firstTwoDigits > 99) {
@@ -370,26 +370,56 @@ async function handleEdgeDetection(request, env) {
         if (!pixels || !Array.isArray(pixels) || !width || !height) {
             return new Response('Invalid data', { status: 400 });
         }
-        
+
         const bands = extractBands(pixels, width, height, customColors, threshold);
-        
+
+        // --- Dynamic Filtering: Remove Resistor Body Color ---
         let bandsForCalc = [...bands];
-        // Heuristic for general display: if more than 4 bands are found,
-        // assume the widest is the body and remove it.
+
+        // 1. Identify the most frequent color (Dominant Color).
+        const colorCounts = {};
+        bandsForCalc.forEach(b => {
+            colorCounts[b.colorName] = (colorCounts[b.colorName] || 0) + 1;
+        });
+
+        let dominantColor = null;
+        let maxCount = 0;
+        for (const [name, count] of Object.entries(colorCounts)) {
+            if (count > maxCount) {
+                maxCount = count;
+                dominantColor = name;
+            }
+        }
+
+        // 2. Filter out the dominant color if it represents the body (appears > 1 times).
+        if (dominantColor && maxCount > 1) {
+            bandsForCalc = bandsForCalc.filter(b => b.colorName !== dominantColor);
+        }
+
+        // 3. Remove the first band if it is Gold/Silver (invalid start).
+        //    Standard resistors generally don't start with tolerance bands.
+        if (bandsForCalc.length > 0 && (bandsForCalc[0].colorName === 'Gold' || bandsForCalc[0].colorName === 'Silver')) {
+            bandsForCalc.shift(); // Remove the invalid first band
+        }
+
+        // 4. Fallback Heuristic: if still more than 4 bands (standard max), 
+        // assume the widest is the body (e.g., a remaining big chunk of background) and remove it.
         if (bandsForCalc.length > 4) {
             bandsForCalc.sort((a, b) => b.width - a.width); // Widest first
-            bandsForCalc.splice(0, 1); // Remove the widest
+            if (bandsForCalc.length > 0) bandsForCalc.shift(); // Remove the widest
             bandsForCalc.sort((a, b) => a.x - b.x); // Restore order
         }
-        
+
         const filteredBandNames = bandsForCalc.map(b => b.colorName);
         const resistorValue = calculateResistorValue(filteredBandNames);
-        
-        return new Response(JSON.stringify({ 
-            success: true, 
-            bands: bands, // Return original bands for UI
-            detected_bands: bands.map(b => b.colorName), // Original names for UI
-            resistor_value: resistorValue 
+
+        return new Response(JSON.stringify({
+            success: true,
+            bands: bandsForCalc, // Return the FILTERED bands so the UI matches the calculation
+            raw_bands: bands,    // Keep detected raw bands for debug
+            removed_body_color: dominantColor, // Info for debug
+            detected_bands: filteredBandNames,
+            resistor_value: resistorValue
         }), { headers: { 'Content-Type': 'application/json' } });
     } catch (e) {
         console.error(`[handleEdgeDetection] Error: ${e.message}`);

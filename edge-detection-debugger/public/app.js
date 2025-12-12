@@ -21,7 +21,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const imagePreview = document.getElementById('image-preview');
     const changeImageBtn = document.getElementById('change-image-btn');
     const resetCropBtn = document.getElementById('reset-crop-btn');
-    
+
     // State
     let currentImage = null;
     let cropper = null;
@@ -31,7 +31,7 @@ document.addEventListener('DOMContentLoaded', () => {
     function preventDefaults(e) { e.preventDefault(); e.stopPropagation(); }
     ['dragenter', 'dragover'].forEach(eventName => dropZone.addEventListener(eventName, () => dropZone.classList.add('drag-over'), false));
     ['dragleave', 'drop'].forEach(eventName => dropZone.addEventListener(eventName, () => dropZone.classList.remove('drag-over'), false));
-    
+
     dropZone.addEventListener('drop', handleDrop, false);
     dropZone.addEventListener('click', () => fileInput.click(), true);
     fileInput.addEventListener('change', handleFiles);
@@ -218,6 +218,7 @@ document.addEventListener('DOMContentLoaded', () => {
             line.style.cssText = `
                 position: absolute;
                 left: ${(band.x / width) * 100}%;
+                transform: translateX(-50%);
                 top: 0;
                 width: 3px;
                 height: 100%;

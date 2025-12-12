@@ -51,28 +51,29 @@
                 <!-- Edge Detection Section -->
                 <div class="section-title">
                     <h2>Edge Detection (Band Boundaries)</h2>
-                    <div style="display: flex; gap: 0.5rem; align-items: center;">
-                                                <button id="edge-detect-btn" class="analyze-btn" style="margin: 0; padding: 0.5rem 1rem; font-size: 0.9rem; background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);">
-                                                    <i class="fa-solid fa-wave-square"></i> バンド検出
-                                                </button>
-                        
-                                                <div style="border-left: 1px solid var(--glass-border); height: 24px; margin: 0 0.5rem;"></div>
-                        
-                                                                        <div class="controls" style="display: flex; align-items: center; gap: 0.5rem;">
-                                                                            <label for="edge-threshold-slider" style="font-size: 0.9rem; color: var(--text-primary);">検出感度:</label>
-                                                                            <button id="threshold-decrement-btn" class="fine-tune-btn">-</button>
-                                                                            <input type="range" id="edge-threshold-slider" min="1" max="30" value="10" step="1" style="width: 100px;">
-                                                                            <button id="threshold-increment-btn" class="fine-tune-btn">+</button>
-                                                                            <span id="edge-threshold-value" style="font-size: 0.9rem; color: var(--text-secondary); width: 20px; text-align: center;">10</span>
-                                                                        </div>                        
-                                                <div style="border-left: 1px solid var(--glass-border); height: 24px; margin: 0 0.5rem;"></div>
-                        
-                                                <label class="switch" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
-                                                    <input type="checkbox" id="edge-learning-mode-toggle">
-                                                    <span class="slider round"></span>
-                                                    <span style="font-size: 0.9rem; color: var(--text-primary);">Learning Mode</span>
-                                                </label>
-                                            </div>
+                    <div style="display: flex; flex-direction: column; gap: 1rem; align-items: flex-start; width: 100%;">
+                        <button id="edge-detect-btn" class="analyze-btn" style="width: 100%; justify-content: center; margin: 0; padding: 0.75rem 1rem; font-size: 1rem; background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);">
+                            <i class="fa-solid fa-wave-square"></i> バンド検出
+                        </button>
+
+                        <div class="controls" style="display: flex; align-items: center; gap: 0.5rem; width: 100%; justify-content: space-between; box-sizing: border-box;">
+                            <label for="edge-threshold-slider" style="font-size: 0.9rem; color: var(--text-primary);">検出感度:</label>
+                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                <button id="threshold-decrement-btn" class="fine-tune-btn">-</button>
+                                <input type="range" id="edge-threshold-slider" min="1" max="30" value="10" step="1" style="flex-grow: 1; min-width: 100px;">
+                                <button id="threshold-increment-btn" class="fine-tune-btn">+</button>
+                                <span id="edge-threshold-value" style="font-size: 0.9rem; color: var(--text-secondary); width: 24px; text-align: center;">10</span>
+                            </div>
+                        </div>                        
+
+                        <div style="display: flex; flex-direction: column; gap: 0.8rem; width: 100%;">
+                            <label class="switch" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                                <input type="checkbox" id="edge-learning-mode-toggle">
+                                <span class="slider round"></span>
+                                <span style="font-size: 0.9rem; color: var(--text-primary);">Learning Mode</span>
+                            </label>
+                        </div>
+                    </div>
                                         </div>
 
                 <!-- Edge Learning Input Area -->
