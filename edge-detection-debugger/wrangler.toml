@@ -1,0 +1,14 @@
+name = "edge-detection-debugger"
+main = "src/index.js"
+compatibility_date = "2023-10-25"
+
+# Serve static assets from the public directory
+assets = { directory = "./public", binding = "ASSETS" }
+
+# KV namespace for storing learned color definitions
+# The same KV namespace can be used, or a new one can be created.
+# For debugging, using the same one can be beneficial to retain learnings.
+[[kv_namespaces]]
+binding = "LEARNING_STORE"
+id = "your-kv-namespace-id-here" # TODO: Replace with your production KV namespace ID
+preview_id = "your-preview-kv-namespace-id-here" # TODO: Replace with your preview KV namespace ID

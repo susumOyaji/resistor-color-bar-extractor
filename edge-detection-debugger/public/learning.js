@@ -1,7 +1,7 @@
 // This file was previously empty. It will now contain the logic for the "Learn from Value" feature.
 
-async function learnFromEdgeDetection(correctValue, statusElement) {
-    console.log('learnFromEdgeDetection called with value:', correctValue);
+async function learnFromEdgeDetection(correctValue, toleranceValue, statusElement) {
+    console.log('learnFromEdgeDetection called with value:', correctValue, 'and tolerance:', toleranceValue);
     
     if (!window.lastEdgeDetectionResult || !window.lastEdgeDetectionResult.bands || window.lastEdgeDetectionResult.bands.length === 0) {
         showToast('先に「バンド検出」を実行して、有効なバンドを見つける必要があります。');
@@ -23,7 +23,8 @@ async function learnFromEdgeDetection(correctValue, statusElement) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 detectedBands: window.lastEdgeDetectionResult.bands,
-                correctValue: correctValue
+                correctValue: correctValue,
+                correctTolerance: toleranceValue
             })
         });
 

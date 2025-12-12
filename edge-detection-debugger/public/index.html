@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edge Detection Debugger</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="background-blobs">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+        <div class="blob blob-3"></div>
+    </div>
+
+    <main class="app-container">
+        <header class="app-header">
+            <div class="logo">
+                <i class="fa-solid fa-wave-square"></i>
+                <h1>Edge Detection Debugger</h1>
+            </div>
+            <p class="subtitle">抵抗器のバンド検出機能に特化したデバッグツール</p>
+        </header>
+
+        <section class="upload-section" id="drop-zone">
+            <input type="file" id="file-input" accept="image/*" hidden>
+            <div class="upload-content">
+                <div class="icon-wrapper"><i class="fa-solid fa-cloud-arrow-up"></i></div>
+                <h3>画像をドラッグ＆ドロップ</h3>
+                <p>または <span class="browse-btn">ファイルを選択</span></p>
+            </div>
+        </section>
+
+        <section class="analysis-section hidden" id="analysis-section">
+            <div class="preview-column">
+                <div class="image-controls">
+                    <button id="change-image-btn" class="secondary-btn"><i class="fa-solid fa-image"></i> 別の画像を選択</button>
+                    <button id="reset-crop-btn" class="secondary-btn" style="margin-left: 0.5rem;"><i class="fa-solid fa-expand"></i> 範囲リセット</button>
+                </div>
+                <div class="image-preview-container" style="position: relative;">
+                    <img id="image-preview" src="" alt="Preview">
+                </div>
+            </div>
+
+            <div class="results-container">
+                <!-- Edge Detection Section -->
+                <div class="section-title">
+                    <h2>Edge Detection (Band Boundaries)</h2>
+                    <div style="display: flex; gap: 0.5rem; align-items: center;">
+                                                <button id="edge-detect-btn" class="analyze-btn" style="margin: 0; padding: 0.5rem 1rem; font-size: 0.9rem; background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);">
+                                                    <i class="fa-solid fa-wave-square"></i> バンド検出
+                                                </button>
+                        
+                                                <div style="border-left: 1px solid var(--glass-border); height: 24px; margin: 0 0.5rem;"></div>
+                        
+                                                                        <div class="controls" style="display: flex; align-items: center; gap: 0.5rem;">
+                                                                            <label for="edge-threshold-slider" style="font-size: 0.9rem; color: var(--text-primary);">検出感度:</label>
+                                                                            <button id="threshold-decrement-btn" class="fine-tune-btn">-</button>
+                                                                            <input type="range" id="edge-threshold-slider" min="1" max="30" value="10" step="1" style="width: 100px;">
+                                                                            <button id="threshold-increment-btn" class="fine-tune-btn">+</button>
+                                                                            <span id="edge-threshold-value" style="font-size: 0.9rem; color: var(--text-secondary); width: 20px; text-align: center;">10</span>
+                                                                        </div>                        
+                                                <div style="border-left: 1px solid var(--glass-border); height: 24px; margin: 0 0.5rem;"></div>
+                        
+                                                <label class="switch" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                                                    <input type="checkbox" id="edge-learning-mode-toggle">
+                                                    <span class="slider round"></span>
+                                                    <span style="font-size: 0.9rem; color: var(--text-primary);">Learning Mode</span>
+                                                </label>
+                                            </div>
+                                        </div>
+
+                <!-- Edge Learning Input Area -->
+                <div id="edge-learning-input-area" style="margin-top: 1rem; padding: 1rem; background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 8px; display: none;">
+                    <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                        <span style="font-size: 0.9rem; color: #e2e8f0;">正解の抵抗値:</span>
+                        <input type="text" id="edge-correct-resistance-input" placeholder="ex: 12k, 270" style="background: rgba(0, 0, 0, 0.3); border: 1px solid var(--glass-border); color: white; padding: 0.4rem 0.8rem; border-radius: 4px; width: 100px;">
+                        
+                        <select id="edge-correct-tolerance-select" style="background: rgba(0, 0, 0, 0.3); border: 1px solid var(--glass-border); color: white; padding: 0.4rem; border-radius: 4px;">
+                            <option value="5">±5% (Gold)</option>
+                            <option value="10">±10% (Silver)</option>
+                            <option value="1">±1% (Brown)</option>
+                            <option value="2">±2% (Red)</option>
+                            <option value="0.5">±0.5% (Green)</option>
+                            <option value="0.25">±0.25% (Blue)</option>
+                            <option value="0.1">±0.1% (Violet)</option>
+                            <option value="20">±20% (None)</option>
+                        </select>
+
+                        <button id="edge-learn-from-value-btn" class="secondary-btn" style="background: #f59e0b; border: none; color: white; font-weight: 600;">
+                            <i class="fa-solid fa-graduation-cap"></i> 値から学習
+                        </button>
+                        <span id="edge-learning-status" style="font-size: 0.85rem; color: #4ade80; margin-left: 0.5rem;"></span>
+                    </div>
+                    <div style="margin-top: 0.5rem; font-size: 0.8rem; color: #94a3b8;">※検出されたバンドの色を、入力値に対応するカラーコードとして登録します。</div>
+                </div>
+
+                <div id="edge-image-container" style="margin-bottom: 1rem; display: none; text-align: center;">
+                    <div style="display: inline-block; position: relative; border-radius: 8px; overflow: hidden; border: 2px solid rgba(245, 158, 11, 0.5);">
+                        <img id="edge-analyzed-image" style="display: block; max-height: 400px; max-width: 100%; height: auto; width: auto;">
+                        <div id="edge-overlay" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: block;"></div>
+                    </div>
+                </div>
+
+                <div id="edge-result" style="margin-top: 1rem; padding: 1rem; background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 12px; display: none;">
+                    <h3 style="margin-bottom: 0.5rem; font-size: 1.1rem; color: #fbbf24;">Detection Result</h3>
+                    <div id="edge-resistor-value" style="font-size: 2rem; font-weight: 700; color: #f59e0b;"></div>
+                    <div id="edge-detected-bands" style="margin-top: 0.5rem; font-size: 0.9rem; color: var(--text-muted);"></div>
+                    <div id="edge-visualization" style="margin-top: 1rem; display: flex; gap: 0.5rem; flex-wrap: wrap;"></div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <div class="toast" id="toast"></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
+    <script src="app.js"></script>
+    <script src="learning.js"></script>
+</body>
+</html>

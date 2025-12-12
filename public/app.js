@@ -1,3 +1,16 @@
+// Global state accessible by other scripts
+window.lastEdgeDetectionResult = null;
+
+function showToast(message) {
+    const toast = document.getElementById('toast');
+    if (!toast) return;
+    toast.textContent = message;
+    toast.classList.add('show');
+    setTimeout(() => {
+        toast.classList.remove('show');
+    }, 3000);
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     console.log('DOMContentLoaded fired');
 
@@ -513,6 +526,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const data = await response.json();
             console.log('Edge detection response:', data);
+            window.lastEdgeDetectionResult = data; // Store for learning
 
             // Render edge visualization on overlay
             renderEdgeVisualization(data.edges, data.bands, canvas.width, canvas.height);
@@ -832,13 +846,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    function showToast(message) {
-        toast.textContent = message;
-        toast.classList.add('show');
-        setTimeout(() => {
-            toast.classList.remove('show');
-        }, 3000);
-    }
+
 
     function generateHarmonies(baseColor) {
         const hsl = rgbToHsl(baseColor.r, baseColor.g, baseColor.b);
